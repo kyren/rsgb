@@ -1,0 +1,6 @@
+[package]
+name = "rsgb"
+version = "0.1.0"
+authors = ["kyren <kerriganw@gmail.com>"]
+
+[dependencies]
