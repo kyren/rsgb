@@ -1,4 +1,4 @@
 compiler! cargo
 let g:rustfmt_autosave = 1
-"let g:syntastic_rust_checkers = ['rustc']
+let g:syntastic_rust_checkers = ['cargo']
 set makeprg=make\ -f./scripts/macos/Makefile

@@ -13,6 +13,7 @@ pub enum Bit {
 }
 pub use self::Bit::*;
 
+/// All registers that the 8 bit opcodes operate on, excludes the F flag register.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Register {
     ARegister,

@@ -1,27 +1,26 @@
 use std::error::Error;
-use instructions::types::*;
+use util::*;
+use instruction::*;
 
-pub fn make_word16(l: u8, h: u8) -> u16 {
-    ((h as u16) << 8) | (l as u16)
-}
-
-pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instruction, Box<Error>> {
-    fn getu<I: Iterator<Item = u8>>(mut i: I) -> Result<u8, Box<Error>> {
-        Ok(i.next().ok_or("Decoding error, expected 1 byte unsigned argument")?)
+pub fn decode_instruction<F>(mut next_byte: F) -> Result<Instruction, Box<Error>>
+    where F: FnMut() -> Option<u8>
+{
+    fn getu<F: FnMut() -> Option<u8>>(mut next_byte: F) -> Result<u8, Box<Error>> {
+        Ok(next_byte().ok_or("Expected 1 byte unsigned instruction argument")?)
     }
 
-    fn geti<I: Iterator<Item = u8>>(mut i: I) -> Result<i8, Box<Error>> {
-        Ok(i.next().ok_or("Decoding error, expected 1 byte signed argument")? as i8)
+    fn geti<F: FnMut() -> Option<u8>>(mut next_byte: F) -> Result<i8, Box<Error>> {
+        Ok(next_byte().ok_or("Expected 1 byte signed instruction argument")? as i8)
     }
 
-    fn getuu<I: Iterator<Item = u8>>(mut i: I) -> Result<u16, Box<Error>> {
-        let err = "Decoding error, expected 2 byte unsigned argument";
-        let l = i.next().ok_or(err)?;
-        let h = i.next().ok_or(err)?;
+    fn getuu<F: FnMut() -> Option<u8>>(mut next_byte: F) -> Result<u16, Box<Error>> {
+        let err = "Expected 2 byte unsigned instruction argument";
+        let l = next_byte().ok_or(err)?;
+        let h = next_byte().ok_or(err)?;
         Ok(make_word16(l, h))
     }
 
-    match i.next() {
+    match next_byte() {
         Some(0x7f) => Ok(LD_R_R(ARegister, ARegister)),
         Some(0x78) => Ok(LD_R_R(ARegister, BRegister)),
         Some(0x79) => Ok(LD_R_R(ARegister, CRegister)),
@@ -78,13 +77,13 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x6c) => Ok(LD_R_R(LRegister, HRegister)),
         Some(0x6d) => Ok(LD_R_R(LRegister, LRegister)),
 
-        Some(0x3e) => Ok(LD_R_N(ARegister, getu(i)?)),
-        Some(0x06) => Ok(LD_R_N(BRegister, getu(i)?)),
-        Some(0x0e) => Ok(LD_R_N(CRegister, getu(i)?)),
-        Some(0x16) => Ok(LD_R_N(DRegister, getu(i)?)),
-        Some(0x1e) => Ok(LD_R_N(ERegister, getu(i)?)),
-        Some(0x26) => Ok(LD_R_N(HRegister, getu(i)?)),
-        Some(0x2e) => Ok(LD_R_N(LRegister, getu(i)?)),
+        Some(0x3e) => Ok(LD_R_N(ARegister, getu(next_byte)?)),
+        Some(0x06) => Ok(LD_R_N(BRegister, getu(next_byte)?)),
+        Some(0x0e) => Ok(LD_R_N(CRegister, getu(next_byte)?)),
+        Some(0x16) => Ok(LD_R_N(DRegister, getu(next_byte)?)),
+        Some(0x1e) => Ok(LD_R_N(ERegister, getu(next_byte)?)),
+        Some(0x26) => Ok(LD_R_N(HRegister, getu(next_byte)?)),
+        Some(0x2e) => Ok(LD_R_N(LRegister, getu(next_byte)?)),
 
         Some(0x7e) => Ok(LD_R_ATHL(ARegister)),
         Some(0x46) => Ok(LD_R_ATHL(BRegister)),
@@ -102,17 +101,17 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x74) => Ok(LD_ATHL_R(HRegister)),
         Some(0x75) => Ok(LD_ATHL_R(LRegister)),
 
-        Some(0x36) => Ok(LD_ATHL_N(getu(i)?)),
+        Some(0x36) => Ok(LD_ATHL_N(getu(next_byte)?)),
 
         Some(0xf2) => Ok(LD_A_ATC),
         Some(0x0a) => Ok(LD_A_ATBC),
         Some(0x1a) => Ok(LD_A_ATDE),
-        Some(0xfa) => Ok(LD_A_ATNN(getuu(i)?)),
+        Some(0xfa) => Ok(LD_A_ATNN(getuu(next_byte)?)),
 
         Some(0xe2) => Ok(LD_ATC_A),
         Some(0x02) => Ok(LD_ATBC_A),
         Some(0x12) => Ok(LD_ATDE_A),
-        Some(0xea) => Ok(LD_ATNN_A(getuu(i)?)),
+        Some(0xea) => Ok(LD_ATNN_A(getuu(next_byte)?)),
 
         Some(0x3a) => Ok(LDD_A_ATHL),
         Some(0x32) => Ok(LDD_ATHL_A),
@@ -120,17 +119,17 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x2a) => Ok(LDI_A_ATHL),
         Some(0x22) => Ok(LDI_ATHL_A),
 
-        Some(0xf0) => Ok(LDH_A_ATN(getu(i)?)),
-        Some(0xe0) => Ok(LDH_ATN_A(getu(i)?)),
+        Some(0xf0) => Ok(LDH_A_ATN(getu(next_byte)?)),
+        Some(0xe0) => Ok(LDH_ATN_A(getu(next_byte)?)),
 
-        Some(0x01) => Ok(LD_BC_NN(getuu(i)?)),
-        Some(0x11) => Ok(LD_DE_NN(getuu(i)?)),
-        Some(0x21) => Ok(LD_HL_NN(getuu(i)?)),
-        Some(0x31) => Ok(LD_SP_NN(getuu(i)?)),
+        Some(0x01) => Ok(LD_BC_NN(getuu(next_byte)?)),
+        Some(0x11) => Ok(LD_DE_NN(getuu(next_byte)?)),
+        Some(0x21) => Ok(LD_HL_NN(getuu(next_byte)?)),
+        Some(0x31) => Ok(LD_SP_NN(getuu(next_byte)?)),
 
         Some(0xf9) => Ok(LD_SP_HL),
-        Some(0xf8) => Ok(LDHL_SP_N(geti(i)?)),
-        Some(0x08) => Ok(LD_ATNN_SP(getuu(i)?)),
+        Some(0xf8) => Ok(LDHL_SP_N(geti(next_byte)?)),
+        Some(0x08) => Ok(LD_ATNN_SP(getuu(next_byte)?)),
 
         Some(0xf5) => Ok(PUSH_AF),
         Some(0xc5) => Ok(PUSH_BC),
@@ -149,7 +148,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x83) => Ok(ADD_A_R(ERegister)),
         Some(0x84) => Ok(ADD_A_R(HRegister)),
         Some(0x85) => Ok(ADD_A_R(LRegister)),
-        Some(0xc6) => Ok(ADD_A_N(getu(i)?)),
+        Some(0xc6) => Ok(ADD_A_N(getu(next_byte)?)),
         Some(0x86) => Ok(ADD_A_ATHL),
 
         Some(0x8f) => Ok(ADC_A_R(ARegister)),
@@ -159,7 +158,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x8b) => Ok(ADC_A_R(ERegister)),
         Some(0x8c) => Ok(ADC_A_R(HRegister)),
         Some(0x8d) => Ok(ADC_A_R(LRegister)),
-        Some(0xce) => Ok(ADC_A_N(getu(i)?)),
+        Some(0xce) => Ok(ADC_A_N(getu(next_byte)?)),
         Some(0x8e) => Ok(ADC_A_ATHL),
 
         Some(0x97) => Ok(SUB_R(ARegister)),
@@ -169,7 +168,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x93) => Ok(SUB_R(ERegister)),
         Some(0x94) => Ok(SUB_R(HRegister)),
         Some(0x95) => Ok(SUB_R(LRegister)),
-        Some(0xd6) => Ok(SUB_N(getu(i)?)),
+        Some(0xd6) => Ok(SUB_N(getu(next_byte)?)),
         Some(0x96) => Ok(SUB_ATHL),
 
         Some(0x9f) => Ok(SBC_A_R(ARegister)),
@@ -179,7 +178,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x9b) => Ok(SBC_A_R(ERegister)),
         Some(0x9c) => Ok(SBC_A_R(HRegister)),
         Some(0x9d) => Ok(SBC_A_R(LRegister)),
-        Some(0xde) => Ok(SBC_A_N(getu(i)?)),
+        Some(0xde) => Ok(SBC_A_N(getu(next_byte)?)),
         Some(0x9e) => Ok(SBC_A_ATHL),
 
         Some(0xa7) => Ok(AND_R(ARegister)),
@@ -189,7 +188,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0xa3) => Ok(AND_R(ERegister)),
         Some(0xa4) => Ok(AND_R(HRegister)),
         Some(0xa5) => Ok(AND_R(LRegister)),
-        Some(0xe6) => Ok(AND_N(getu(i)?)),
+        Some(0xe6) => Ok(AND_N(getu(next_byte)?)),
         Some(0xa6) => Ok(AND_ATHL),
 
         Some(0xb7) => Ok(OR_R(ARegister)),
@@ -199,7 +198,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0xb3) => Ok(OR_R(ERegister)),
         Some(0xb4) => Ok(OR_R(HRegister)),
         Some(0xb5) => Ok(OR_R(LRegister)),
-        Some(0xf6) => Ok(OR_N(getu(i)?)),
+        Some(0xf6) => Ok(OR_N(getu(next_byte)?)),
         Some(0xb6) => Ok(OR_ATHL),
 
         Some(0xaf) => Ok(XOR_R(ARegister)),
@@ -209,7 +208,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0xab) => Ok(XOR_R(ERegister)),
         Some(0xac) => Ok(XOR_R(HRegister)),
         Some(0xad) => Ok(XOR_R(LRegister)),
-        Some(0xee) => Ok(XOR_N(getu(i)?)),
+        Some(0xee) => Ok(XOR_N(getu(next_byte)?)),
         Some(0xae) => Ok(XOR_ATHL),
 
         Some(0xbf) => Ok(CP_R(ARegister)),
@@ -219,7 +218,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0xbb) => Ok(CP_R(ERegister)),
         Some(0xbc) => Ok(CP_R(HRegister)),
         Some(0xbd) => Ok(CP_R(LRegister)),
-        Some(0xfe) => Ok(CP_N(getu(i)?)),
+        Some(0xfe) => Ok(CP_N(getu(next_byte)?)),
         Some(0xbe) => Ok(CP_ATHL),
 
         Some(0x3c) => Ok(INC_R(ARegister)),
@@ -245,7 +244,7 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x29) => Ok(ADD_HL_HL),
         Some(0x39) => Ok(ADD_HL_SP),
 
-        Some(0xe8) => Ok(ADD_SP_N(geti(i)?)),
+        Some(0xe8) => Ok(ADD_SP_N(geti(next_byte)?)),
 
         Some(0x03) => Ok(INC_BC),
         Some(0x13) => Ok(INC_DE),
@@ -273,24 +272,24 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0x0f) => Ok(RRCA),
         Some(0x1f) => Ok(RRA),
 
-        Some(0xc3) => Ok(JP_NN(getuu(i)?)),
-        Some(0xc2) => Ok(JP_C_NN(NZero, getuu(i)?)),
-        Some(0xca) => Ok(JP_C_NN(Zero, getuu(i)?)),
-        Some(0xd2) => Ok(JP_C_NN(NCarry, getuu(i)?)),
-        Some(0xda) => Ok(JP_C_NN(Carry, getuu(i)?)),
+        Some(0xc3) => Ok(JP_NN(getuu(next_byte)?)),
+        Some(0xc2) => Ok(JP_C_NN(NZero, getuu(next_byte)?)),
+        Some(0xca) => Ok(JP_C_NN(Zero, getuu(next_byte)?)),
+        Some(0xd2) => Ok(JP_C_NN(NCarry, getuu(next_byte)?)),
+        Some(0xda) => Ok(JP_C_NN(Carry, getuu(next_byte)?)),
         Some(0xe9) => Ok(JP_ATHL),
 
-        Some(0x18) => Ok(JR_N(geti(i)?)),
-        Some(0x20) => Ok(JR_C_N(NZero, geti(i)?)),
-        Some(0x28) => Ok(JR_C_N(Zero, geti(i)?)),
-        Some(0x30) => Ok(JR_C_N(NCarry, geti(i)?)),
-        Some(0x38) => Ok(JR_C_N(Carry, geti(i)?)),
+        Some(0x18) => Ok(JR_N(geti(next_byte)?)),
+        Some(0x20) => Ok(JR_C_N(NZero, geti(next_byte)?)),
+        Some(0x28) => Ok(JR_C_N(Zero, geti(next_byte)?)),
+        Some(0x30) => Ok(JR_C_N(NCarry, geti(next_byte)?)),
+        Some(0x38) => Ok(JR_C_N(Carry, geti(next_byte)?)),
 
-        Some(0xcd) => Ok(CALL_NN(getuu(i)?)),
-        Some(0xc4) => Ok(CALL_C_NN(NZero, getuu(i)?)),
-        Some(0xcc) => Ok(CALL_C_NN(Zero, getuu(i)?)),
-        Some(0xd4) => Ok(CALL_C_NN(NCarry, getuu(i)?)),
-        Some(0xdc) => Ok(CALL_C_NN(Carry, getuu(i)?)),
+        Some(0xcd) => Ok(CALL_NN(getuu(next_byte)?)),
+        Some(0xc4) => Ok(CALL_C_NN(NZero, getuu(next_byte)?)),
+        Some(0xcc) => Ok(CALL_C_NN(Zero, getuu(next_byte)?)),
+        Some(0xd4) => Ok(CALL_C_NN(NCarry, getuu(next_byte)?)),
+        Some(0xdc) => Ok(CALL_C_NN(Carry, getuu(next_byte)?)),
 
         Some(0xc7) => Ok(RST_RA(Reset00)),
         Some(0xcf) => Ok(RST_RA(Reset08)),
@@ -310,15 +309,15 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
         Some(0xd9) => Ok(RETI),
 
         Some(0x10) => {
-            match i.next() {
+            match next_byte() {
                 Some(0x00) => Ok(STOP),
-                None => Err("Decoding error, no byte following 0x10".into()),
-                _ => Err("Decoding error, improper byte following 0x10".into()),
+                Some(b) => Err(format!("Improper instruction byte {:x} following 0x10", b).into()),
+                None => Err("No instruction byte following 0x10".into()),
             }
         }
 
         Some(0xcb) => {
-            match i.next() {
+            match next_byte() {
                 Some(0x37) => Ok(SWAP_R(ARegister)),
                 Some(0x30) => Ok(SWAP_R(BRegister)),
                 Some(0x31) => Ok(SWAP_R(CRegister)),
@@ -607,12 +606,12 @@ pub fn decode_instruction<I: Iterator<Item = u8>>(mut i: I) -> Result<Instructio
                 Some(0xbd) => Ok(RES_B_R(Bit7, LRegister)),
                 Some(0xbe) => Ok(RES_B_ATHL(Bit7)),
 
-                None => Err("No byte following 0xcb".into()),
-                _ => Err("Decoding error, improper byte following 0xcb".into()),
+                Some(b) => Err(format!("Improper instruction byte {:x} following 0xcb", b).into()),
+                None => Err("No instruction byte following 0xcb".into()),
             }
         }
 
         None => Err("No first byte of instruction available".into()),
-        _ => Err("Decoding error, improper first byte".into()),
+        _ => Err("Improper first byte of instruction".into()),
     }
 }
