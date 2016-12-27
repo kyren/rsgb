@@ -38,6 +38,20 @@ pub trait Cpu {
         Ok(())
     }
 
+    fn push_stack16(&mut self, nn: u16) -> Result<(), Box<Error>> {
+        let sp = self.get_stack_pointer();
+        self.set_memory16(sp - 2, nn)?;
+        self.set_stack_pointer(sp - 2);
+        Ok(())
+    }
+
+    fn pop_stack16(&mut self) -> Result<u16, Box<Error>> {
+        let sp = self.get_stack_pointer();
+        let nn = self.get_memory16(sp)?;
+        self.set_stack_pointer(sp + 2);
+        Ok(nn)
+    }
+
     fn get_af(&self) -> u16 {
         make_word16(self.get_register(ARegister), self.get_flags_register())
     }
@@ -258,6 +272,46 @@ pub trait Cpu {
                 let sp = self.get_stack_pointer();
                 self.set_memory16(nn, sp)?;
                 self.tick(20);
+            }
+            PUSH_AF => {
+                let af = self.get_af();
+                self.push_stack16(af)?;
+                self.tick(16);
+            }
+            PUSH_BC => {
+                let bc = self.get_bc();
+                self.push_stack16(bc)?;
+                self.tick(16);
+            }
+            PUSH_DE => {
+                let de = self.get_de();
+                self.push_stack16(de)?;
+                self.tick(16);
+            }
+            PUSH_HL => {
+                let hl = self.get_hl();
+                self.push_stack16(hl)?;
+                self.tick(16);
+            }
+            POP_AF => {
+                let nn = self.pop_stack16()?;
+                self.set_af(nn);
+                self.tick(12);
+            }
+            POP_BC => {
+                let nn = self.pop_stack16()?;
+                self.set_bc(nn);
+                self.tick(12);
+            }
+            POP_DE => {
+                let nn = self.pop_stack16()?;
+                self.set_de(nn);
+                self.tick(12);
+            }
+            POP_HL => {
+                let nn = self.pop_stack16()?;
+                self.set_hl(nn);
+                self.tick(12);
             }
             _ => unimplemented!(),
         }
