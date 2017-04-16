@@ -3,6 +3,23 @@ use util::*;
 use instruction::*;
 use decoding::*;
 
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub enum Flag {
+    Z,
+    N,
+    H,
+    C,
+}
+
+pub fn flag_bit(f: Flag) -> u8 {
+    match f {
+        Flag::Z => 7,
+        Flag::N => 6,
+        Flag::H => 5,
+        Flag::C => 4,
+    }
+}
+
 pub trait Cpu {
     fn get_register(&self, reg: Register) -> u8;
     fn set_register(&mut self, reg: Register, val: u8);
@@ -123,6 +140,79 @@ pub trait Cpu {
     fn set_atc(&mut self, v: u8) -> Result<(), Box<Error>> {
         let c = self.get_register(CRegister);
         self.set_memory(make_word16(0xff, c), v)
+    }
+
+    fn get_flag(&self, flag: Flag) -> bool {
+        let f = self.get_flags_register();
+        get_bit(f, flag_bit(flag))
+    }
+
+    fn set_flags(&mut self, fs: &[(Flag, bool)]) {
+        let mut flags = self.get_flags_register();
+        for &(f, v) in fs {
+            flags = set_bit(flags, flag_bit(f), v);
+        }
+        self.set_flags_register(flags);
+    }
+
+    fn add_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let (res, h, c) = add8(a, n);
+        self.set_flags(&[(Flag::Z, res == 0),
+                         (Flag::N, false),
+                         (Flag::H, h),
+                         (Flag::C, c)]);
+        self.set_register(ARegister, res);
+    }
+
+    fn add_ca(&mut self, mut n: u8) {
+        let a = self.get_register(ARegister);
+
+        let mut carry = false;
+        if self.get_flag(Flag::C) {
+            if n == 0xff {
+                carry = true;
+            }
+            n += 1;
+        }
+        let (res, h, c) = add8(a, n);
+        carry |= c;
+
+        self.set_flags(&[(Flag::Z, res == 0),
+                         (Flag::N, false),
+                         (Flag::H, h),
+                         (Flag::C, carry)]);
+        self.set_register(ARegister, res);
+    }
+
+    fn sub_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let (res, h, c) = sub8(a, n);
+        self.set_flags(&[(Flag::Z, res == 0),
+                         (Flag::N, true),
+                         (Flag::H, h),
+                         (Flag::C, c)]);
+        self.set_register(ARegister, res);
+    }
+
+    fn sub_ca(&mut self, mut n: u8) {
+        let a = self.get_register(ARegister);
+
+        let mut carry = false;
+        if self.get_flag(Flag::C) {
+            if n == 0x00 {
+                carry = true;
+            }
+            n -= 1;
+        }
+        let (res, h, c) = sub8(a, n);
+        carry |= c;
+
+        self.set_flags(&[(Flag::Z, res == 0),
+                         (Flag::N, true),
+                         (Flag::H, h),
+                         (Flag::C, carry)]);
+        self.set_register(ARegister, res);
     }
 
     fn step(&mut self) -> Result<(), Box<Error>> {
@@ -312,6 +402,62 @@ pub trait Cpu {
                 let nn = self.pop_stack16()?;
                 self.set_hl(nn);
                 self.tick(12);
+            }
+            ADD_A_R(r) => {
+                let n = self.get_register(r);
+                self.add_a(n);
+                self.tick(4);
+            }
+            ADD_A_N(n) => {
+                self.add_a(n);
+                self.tick(8);
+            }
+            ADD_A_ATHL => {
+                let athl = self.get_athl()?;
+                self.add_a(athl);
+                self.tick(8);
+            }
+            ADC_A_R(r) => {
+                let n = self.get_register(r);
+                self.add_ca(n);
+                self.tick(4);
+            }
+            ADC_A_N(n) => {
+                self.add_ca(n);
+                self.tick(8);
+            }
+            ADC_A_ATHL => {
+                let athl = self.get_athl()?;
+                self.add_ca(athl);
+                self.tick(8);
+            }
+            SUB_R(r) => {
+                let n = self.get_register(r);
+                self.sub_a(n);
+                self.tick(4);
+            }
+            SUB_N(n) => {
+                self.sub_a(n);
+                self.tick(8);
+            }
+            SUB_ATHL => {
+                let athl = self.get_athl()?;
+                self.sub_a(athl);
+                self.tick(8);
+            }
+            SBC_A_R(r) => {
+                let n = self.get_register(r);
+                self.sub_ca(n);
+                self.tick(4);
+            }
+            SBC_A_N(n) => {
+                self.sub_ca(n);
+                self.tick(8);
+            }
+            SBC_A_ATHL => {
+                let athl = self.get_athl()?;
+                self.sub_ca(athl);
+                self.tick(8);
             }
             _ => unimplemented!(),
         }
