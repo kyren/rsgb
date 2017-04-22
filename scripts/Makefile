@@ -1,8 +1,8 @@
-release:
-	cargo build --release
-
 debug:
 	cargo build
+
+release:
+	cargo build --release
 
 test:
 	cargo test

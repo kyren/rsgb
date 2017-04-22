@@ -1,0 +1,207 @@
+use util::*;
+use cpu::*;
+use instruction::*;
+use screen::*;
+
+pub struct EmulatorState {
+    pub interrupts_enabled: u8,
+    pub stack_pointer: u16,
+    pub program_counter: u16,
+
+    pub a_register: u8,
+    pub b_register: u8,
+    pub c_register: u8,
+    pub d_register: u8,
+    pub e_register: u8,
+    pub f_register: u8,
+    pub h_register: u8,
+    pub l_register: u8,
+
+    pub cartridge_rom_bank0: [u8; 0x4000],
+    pub cartridge_rom_bank1: [u8; 0x4000],
+
+    pub internal_ram_bank0: [u8; 0x1000],
+    pub internal_ram_bank1: [u8; 0x1000],
+    pub zero_page: [u8; 0x7f],
+
+    pub character_ram: [u8; 0x1800],
+    pub bg_map_data: [u8; 0x800],
+    pub sprite_attribute_data: [u8; 0x80],
+}
+
+impl EmulatorState {
+    pub fn new() -> EmulatorState {
+        EmulatorState {
+            interrupts_enabled: 0x0f,
+            stack_pointer: 0x0,
+            program_counter: 0x100,
+            a_register: 0x0,
+            b_register: 0x0,
+            c_register: 0x0,
+            d_register: 0x0,
+            e_register: 0x0,
+            f_register: 0x0,
+            h_register: 0x0,
+            l_register: 0x0,
+            cartridge_rom_bank0: [0x0; 0x4000],
+            cartridge_rom_bank1: [0x0; 0x4000],
+            internal_ram_bank0: [0x0; 0x1000],
+            internal_ram_bank1: [0x0; 0x1000],
+            zero_page: [0x0; 0x7f],
+            character_ram: [0x0; 0x1800],
+            bg_map_data: [0x0; 0x800],
+            sprite_attribute_data: [0x0; 0x80],
+        }
+    }
+
+    pub fn load_rom(rom: &[u8]) -> Result<EmulatorState> {
+        let mut state = EmulatorState::new();
+        match rom.len() {
+            0x4000 => {
+                state
+                    .cartridge_rom_bank0
+                    .copy_from_slice(&rom[0..0x4000]);
+                Ok(state)
+            }
+            0x8000 => {
+                state
+                    .cartridge_rom_bank0
+                    .copy_from_slice(&rom[0..0x4000]);
+                state
+                    .cartridge_rom_bank1
+                    .copy_from_slice(&rom[0x4000..0x8000]);
+                Ok(state)
+            }
+            len => Err(format!("Invalid rom size {}", len).into()),
+        }
+    }
+
+    pub fn get_screen(&self) -> Screen {
+        let mut screen = Screen::new();
+        for y in 0..VERTICAL_SCREEN_PIXELS / 8 {
+            for x in 0..HORIZONTAL_SCREEN_PIXELS / 8 {
+                let tile = self.bg_map_data[y as usize * 32 + x as usize];
+                for ytile in 0..8 {
+                    let b1 = self.character_ram[tile as usize * 16 + ytile as usize * 2];
+                    let b2 = self.character_ram[tile as usize * 16 + ytile as usize * 2 + 1];
+                    for xtile in 0..8 {
+                        let column = 7 - xtile;
+                        screen.set_pixel(x * 8 + xtile,
+                                         y * 8 + ytile,
+                                         match (get_bit(b1, column), get_bit(b2, column)) {
+                                             (false, false) => Pixel::White,
+                                             (false, true) => Pixel::LightGray,
+                                             (true, false) => Pixel::DarkGray,
+                                             (true, true) => Pixel::Black,
+                                         });
+                    }
+                }
+            }
+        }
+        screen
+    }
+}
+
+impl Cpu for EmulatorState {
+    fn get_register(&self, reg: Register) -> u8 {
+        match reg {
+            Register::ARegister => self.a_register,
+            Register::BRegister => self.b_register,
+            Register::CRegister => self.c_register,
+            Register::DRegister => self.d_register,
+            Register::ERegister => self.e_register,
+            Register::HRegister => self.h_register,
+            Register::LRegister => self.l_register,
+        }
+    }
+
+    fn set_register(&mut self, reg: Register, val: u8) {
+        match reg {
+            Register::ARegister => self.a_register = val,
+            Register::BRegister => self.b_register = val,
+            Register::CRegister => self.c_register = val,
+            Register::DRegister => self.d_register = val,
+            Register::ERegister => self.e_register = val,
+            Register::HRegister => self.h_register = val,
+            Register::LRegister => self.l_register = val,
+        }
+    }
+
+    fn get_flags_register(&self) -> u8 {
+        self.f_register
+    }
+
+    fn set_flags_register(&mut self, flags: u8) {
+        self.f_register = flags;
+    }
+
+    fn get_program_counter(&self) -> u16 {
+        self.program_counter
+    }
+
+    fn set_program_counter(&mut self, pc: u16) {
+        self.program_counter = pc;
+    }
+
+    fn get_stack_pointer(&self) -> u16 {
+        self.stack_pointer
+    }
+
+    fn set_stack_pointer(&mut self, pc: u16) {
+        self.stack_pointer = pc;
+    }
+
+    fn tick(&mut self, _count: u8) {}
+
+    fn halt(&mut self) {}
+
+    fn stop(&mut self) {}
+
+    fn set_interrupts_enabled(&mut self, _enabled: bool) {}
+
+    fn get_memory(&self, addr: u16) -> Result<u8> {
+        match addr {
+            0...0x3999 => Ok(self.cartridge_rom_bank0[addr as usize]),
+            0x4000...0x7fff => Ok(self.cartridge_rom_bank1[addr as usize - 0x4000]),
+            0x8000...0x97ff => Ok(self.character_ram[addr as usize - 0x8000]),
+            0x9800...0x9fff => Ok(self.bg_map_data[addr as usize - 0x9800]),
+            0xa000...0xbfff => Err(format!("Illegal read from cartridge ram bank {}", addr).into()),
+            0xc000...0xcfff => Ok(self.internal_ram_bank0[addr as usize - 0xc000]),
+            0xd000...0xdfff => Ok(self.internal_ram_bank1[addr as usize - 0xd000]),
+            0xe000...0xfdff => self.get_memory(addr - 0x2000),
+            0xfe00...0xfe99 => Ok(self.sprite_attribute_data[addr as usize - 0xfe00]),
+            0xfea0...0xfeff => {
+                Err(format!("Illegal read from unusable memory region {}", addr).into())
+            }
+            0xff00...0xff7f => Ok(0x0), // TODO: Implement hardware registers
+            0xff80...0xfffe => Ok(self.zero_page[addr as usize - 0xff80]),
+            _ => {
+                assert_eq!(addr, 0xffff);
+                Ok(self.interrupts_enabled)
+            }
+        }
+    }
+
+    fn set_memory(&mut self, addr: u16, n: u8) -> Result<()> {
+        match addr {
+            0...0x3fff => Err(format!("Illegal write to cartridge rom {}", addr).into()),
+            0x4000...0x7fff => Err(format!("Illegal write to cartridge rom {}", addr).into()),
+            0x8000...0x97ff => Ok(self.character_ram[addr as usize - 0x8000] = n),
+            0x9800...0x9fff => Ok(self.bg_map_data[addr as usize - 0x9800] = n),
+            0xa000...0xbfff => Err(format!("Illegal write to cartridge ram bank {}", addr).into()),
+            0xc000...0xcfff => Ok(self.internal_ram_bank0[addr as usize - 0xc000] = n),
+            0xd000...0xdfff => Ok(self.internal_ram_bank1[addr as usize - 0xd000] = n),
+            0xe000...0xfdff => self.set_memory(addr - 0x2000, n),
+            0xfe00...0xfe99 => Ok(self.sprite_attribute_data[addr as usize - 0xfe00] = n),
+            0xfea0...0xfeff => {
+                Err(format!("Illegal write to unusable memory region {}", addr).into())
+            }
+            0xff00...0xff7f => Ok(()), // TODO: Implement hardware registers
+            0xff80...0xfffe => Ok(self.zero_page[addr as usize - 0xff80] = n),
+            _ => {
+                assert_eq!(addr, 0xffff);
+                Ok(self.interrupts_enabled = n)
+            }
+        }
+    }
+}

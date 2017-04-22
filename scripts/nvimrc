@@ -1,0 +1,3 @@
+compiler! cargo
+let g:syntastic_rust_checkers = ['cargo']
+set makeprg=make\ -f./scripts/Makefile

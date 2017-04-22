@@ -1,4 +1,9 @@
+use std::result;
+use std::error;
 use std::ops::{BitAnd, BitOr, Not, Shl};
+
+pub type Error = Box<error::Error>;
+pub type Result<T> = result::Result<T, Error>;
 
 pub fn make_word16(h: u8, l: u8) -> u16 {
     ((h as u16) << 8) | (l as u16)
@@ -38,10 +43,20 @@ pub fn set_bit<T>(v: T, bit: u8, val: bool) -> T
 
 // Add two 8 bit numbers, returns the result, 3 bit and 7 bit carry flags
 pub fn add8(a: u8, b: u8) -> (u8, bool, bool) {
-    (a + b, low_nibble(a) + low_nibble(b) > 0x0f, a as u16 + b as u16 > 0xff)
+    (a.wrapping_add(b), low_nibble(a) + low_nibble(b) > 0x0f, a as u16 + b as u16 > 0xff)
 }
 
 // subtract two 8 bit numbers, returns the result, the borrow 4 bit flag and the borrow 8 bit flag.
 pub fn sub8(a: u8, b: u8) -> (u8, bool, bool) {
-    (a - b, low_nibble(b) > low_nibble(a), b > a)
+    (a.wrapping_sub(b), low_nibble(b) > low_nibble(a), b > a)
+}
+
+// Add two 16 bit numbers, returns the result, 11 bit and 15 bit carry flags
+pub fn add16(a: u16, b: u16) -> (u16, bool, bool) {
+    let low12 = |n| make_word16(low_nibble(high_byte(n)), low_byte(n));
+    (a.wrapping_add(b), low12(a) + low12(b) > 0xfff, a as u32 + b as u32 > 0xffff)
+}
+
+pub fn add_u16_i8(a: u16, b: i8) -> u16 {
+    (a as i32 + b as i32) as u16
 }

@@ -14,7 +14,7 @@ pub enum Bit {
 pub use self::Bit::*;
 
 /// All registers that the 8 bit opcodes operate on, excludes the F flag register.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Register {
     ARegister,
     BRegister,

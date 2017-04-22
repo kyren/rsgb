@@ -1,12 +1,10 @@
-use std::error::Error;
 use util::*;
 use instruction::*;
 
-pub fn decode_instruction<F>(mut next_byte: F) -> Result<Instruction, Box<Error>>
-    where F: FnMut() -> Result<u8, Box<Error>>
+pub fn decode_instruction<F>(mut next_byte: F) -> Result<Instruction>
+    where F: FnMut() -> Result<u8>
 {
-    fn next_word16<F: FnMut() -> Result<u8, Box<Error>>>(mut next_byte: F)
-                                                         -> Result<u16, Box<Error>> {
+    fn next_word16<F: FnMut() -> Result<u8>>(mut next_byte: F) -> Result<u16> {
         let l = next_byte()?;
         let h = next_byte()?;
         Ok(make_word16(h, l))

@@ -1,4 +1,3 @@
-use std::error::Error;
 use util::*;
 use instruction::*;
 use decoding::*;
@@ -20,6 +19,19 @@ pub fn flag_bit(f: Flag) -> u8 {
     }
 }
 
+pub fn bit_number(b: Bit) -> u8 {
+    match b {
+        Bit0 => 0,
+        Bit1 => 1,
+        Bit2 => 2,
+        Bit3 => 3,
+        Bit4 => 4,
+        Bit5 => 5,
+        Bit6 => 6,
+        Bit7 => 7,
+    }
+}
+
 pub trait Cpu {
     fn get_register(&self, reg: Register) -> u8;
     fn set_register(&mut self, reg: Register, val: u8);
@@ -31,7 +43,7 @@ pub trait Cpu {
     fn set_program_counter(&mut self, pc: u16);
 
     fn get_stack_pointer(&self) -> u16;
-    fn set_stack_pointer(&mut self, pc: u16);
+    fn set_stack_pointer(&mut self, sp: u16);
 
     fn tick(&mut self, count: u8);
 
@@ -40,29 +52,29 @@ pub trait Cpu {
 
     fn set_interrupts_enabled(&mut self, enabled: bool);
 
-    fn get_memory(&self, addr: u16) -> Result<u8, Box<Error>>;
-    fn set_memory(&mut self, addr: u16, n: u8) -> Result<(), Box<Error>>;
+    fn get_memory(&self, addr: u16) -> Result<u8>;
+    fn set_memory(&mut self, addr: u16, n: u8) -> Result<()>;
 
-    fn get_memory16(&self, addr: u16) -> Result<u16, Box<Error>> {
+    fn get_memory16(&self, addr: u16) -> Result<u16> {
         let l = self.get_memory(addr)?;
         let h = self.get_memory(addr + 1)?;
         Ok(make_word16(h, l))
     }
 
-    fn set_memory16(&mut self, addr: u16, nn: u16) -> Result<(), Box<Error>> {
+    fn set_memory16(&mut self, addr: u16, nn: u16) -> Result<()> {
         self.set_memory(addr, low_byte(nn))?;
         self.set_memory(addr + 1, high_byte(nn))?;
         Ok(())
     }
 
-    fn push_stack16(&mut self, nn: u16) -> Result<(), Box<Error>> {
+    fn push_stack16(&mut self, nn: u16) -> Result<()> {
         let sp = self.get_stack_pointer();
         self.set_memory16(sp - 2, nn)?;
         self.set_stack_pointer(sp - 2);
         Ok(())
     }
 
-    fn pop_stack16(&mut self) -> Result<u16, Box<Error>> {
+    fn pop_stack16(&mut self) -> Result<u16> {
         let sp = self.get_stack_pointer();
         let nn = self.get_memory16(sp)?;
         self.set_stack_pointer(sp + 2);
@@ -105,39 +117,39 @@ pub trait Cpu {
         self.set_register(LRegister, low_byte(v));
     }
 
-    fn get_atbc(&self) -> Result<u8, Box<Error>> {
+    fn get_atbc(&self) -> Result<u8> {
         self.get_memory(self.get_bc())
     }
 
-    fn get_atde(&self) -> Result<u8, Box<Error>> {
+    fn get_atde(&self) -> Result<u8> {
         self.get_memory(self.get_de())
     }
 
-    fn get_athl(&self) -> Result<u8, Box<Error>> {
+    fn get_athl(&self) -> Result<u8> {
         self.get_memory(self.get_hl())
     }
 
-    fn get_atc(&self) -> Result<u8, Box<Error>> {
+    fn get_atc(&self) -> Result<u8> {
         let c = self.get_register(CRegister);
         self.get_memory(make_word16(0xff, c))
     }
 
-    fn set_atbc(&mut self, v: u8) -> Result<(), Box<Error>> {
+    fn set_atbc(&mut self, v: u8) -> Result<()> {
         let bc = self.get_bc();
         self.set_memory(bc, v)
     }
 
-    fn set_atde(&mut self, v: u8) -> Result<(), Box<Error>> {
+    fn set_atde(&mut self, v: u8) -> Result<()> {
         let de = self.get_de();
         self.set_memory(de, v)
     }
 
-    fn set_athl(&mut self, v: u8) -> Result<(), Box<Error>> {
+    fn set_athl(&mut self, v: u8) -> Result<()> {
         let hl = self.get_hl();
         self.set_memory(hl, v)
     }
 
-    fn set_atc(&mut self, v: u8) -> Result<(), Box<Error>> {
+    fn set_atc(&mut self, v: u8) -> Result<()> {
         let c = self.get_register(CRegister);
         self.set_memory(make_word16(0xff, c), v)
     }
@@ -153,6 +165,15 @@ pub trait Cpu {
             flags = set_bit(flags, flag_bit(f), v);
         }
         self.set_flags_register(flags);
+    }
+
+    fn test_cond(&self, c: Cond) -> bool {
+        match c {
+            Cond::Zero => self.get_flag(Flag::Z),
+            Cond::NZero => !self.get_flag(Flag::Z),
+            Cond::Carry => self.get_flag(Flag::C),
+            Cond::NCarry => !self.get_flag(Flag::C),
+        }
     }
 
     fn add_a(&mut self, n: u8) {
@@ -215,7 +236,65 @@ pub trait Cpu {
         self.set_register(ARegister, res);
     }
 
-    fn step(&mut self) -> Result<(), Box<Error>> {
+    fn do_and_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let r = a & n;
+        self.set_flags(&[(Flag::Z, r == 0),
+                         (Flag::N, false),
+                         (Flag::H, true),
+                         (Flag::C, false)]);
+        self.set_register(ARegister, r);
+    }
+
+    fn do_or_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let r = a | n;
+        self.set_flags(&[(Flag::Z, r == 0),
+                         (Flag::N, false),
+                         (Flag::H, false),
+                         (Flag::C, false)]);
+        self.set_register(ARegister, r);
+    }
+
+    fn do_xor_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let r = a ^ n;
+        self.set_flags(&[(Flag::Z, r == 0),
+                         (Flag::N, false),
+                         (Flag::H, false),
+                         (Flag::C, false)]);
+        self.set_register(ARegister, r);
+    }
+
+    fn do_cp_a(&mut self, n: u8) {
+        let a = self.get_register(ARegister);
+        let (r, h, c) = sub8(a, n);
+        self.set_flags(&[(Flag::Z, r == 0),
+                         (Flag::N, true),
+                         (Flag::H, h),
+                         (Flag::C, c)]);
+    }
+
+    fn do_add_hl(&mut self, nn: u16) {
+        let hl = self.get_hl();
+        let (res, h, c) = add16(hl, nn);
+        self.set_flags(&[(Flag::N, false), (Flag::H, h), (Flag::C, c)]);
+        self.set_hl(res);
+    }
+
+    fn do_rr(&mut self, r: Register) {
+        let v = self.get_register(r);
+        let c = self.get_flag(Flag::C);
+        let nc = get_bit(v, 0);
+        let l = set_bit(v >> 1, 7, c);
+        self.set_register(r, l);
+        self.set_flags(&[(Flag::Z, l == 0),
+                         (Flag::N, false),
+                         (Flag::H, false),
+                         (Flag::C, nc)]);
+    }
+
+    fn step(&mut self) -> Result<()> {
         let instruction = decode_instruction(|| {
             let pc = self.get_program_counter();
             if pc == u16::max_value() {
@@ -229,7 +308,7 @@ pub trait Cpu {
         self.do_instruction(instruction)
     }
 
-    fn do_instruction(&mut self, i: Instruction) -> Result<(), Box<Error>> {
+    fn do_instruction(&mut self, i: Instruction) -> Result<()> {
         match i {
             LD_R_R(tr, sr) => {
                 let sv = self.get_register(sr);
@@ -459,7 +538,203 @@ pub trait Cpu {
                 self.sub_ca(athl);
                 self.tick(8);
             }
-            _ => unimplemented!(),
+            NOP => {
+                self.tick(4);
+            }
+            INC_R(r) => {
+                let v = self.get_register(r);
+                let (res, h, _) = add8(v, 1);
+                self.set_flags(&[(Flag::Z, res == 0), (Flag::N, false), (Flag::H, h)]);
+                self.set_register(r, res);
+                self.tick(4);
+            }
+            DEC_R(r) => {
+                let v = self.get_register(r);
+                let (res, h, _) = sub8(v, 1);
+                self.set_flags(&[(Flag::Z, res == 0), (Flag::N, true), (Flag::H, h)]);
+                self.set_register(r, res);
+                self.tick(4);
+            }
+            INC_ATHL => {
+                let v = self.get_athl()?;
+                let (res, h, _) = add8(v, 1);
+                self.set_flags(&[(Flag::Z, res == 0), (Flag::N, false), (Flag::H, h)]);
+                self.set_athl(res)?;
+                self.tick(12);
+            }
+            DEC_ATHL => {
+                let v = self.get_athl()?;
+                let (res, h, _) = sub8(v, 1);
+                self.set_flags(&[(Flag::Z, res == 0), (Flag::N, true), (Flag::H, h)]);
+                self.set_athl(res)?;
+                self.tick(12);
+            }
+            ADD_HL_HL => {
+                let hl = self.get_hl();
+                self.do_add_hl(hl);
+                self.tick(8);
+            }
+            JP_NN(nn) => {
+                self.set_program_counter(nn);
+                self.tick(12);
+            }
+            JP_ATHL => {
+                let hl = self.get_hl();
+                self.set_program_counter(hl);
+                self.tick(4);
+            }
+            INC_HL => {
+                let hl = self.get_hl();
+                self.set_hl(hl.wrapping_add(1));
+                self.tick(8);
+            }
+            INC_BC => {
+                let hl = self.get_bc();
+                self.set_bc(hl.wrapping_add(1));
+                self.tick(8);
+            }
+            INC_DE => {
+                let hl = self.get_de();
+                self.set_de(hl.wrapping_add(1));
+                self.tick(8);
+            }
+            AND_R(r) => {
+                let r = self.get_register(r);
+                self.do_and_a(r);
+                self.tick(4);
+            }
+            AND_N(n) => {
+                self.do_and_a(n);
+                self.tick(8);
+            }
+            OR_R(r) => {
+                let r = self.get_register(r);
+                self.do_or_a(r);
+                self.tick(4);
+            }
+            OR_ATHL => {
+                let v = self.get_athl()?;
+                self.do_or_a(v);
+                self.tick(8);
+            }
+            XOR_R(r) => {
+                let r = self.get_register(r);
+                self.do_xor_a(r);
+                self.tick(4);
+            }
+            XOR_N(n) => {
+                self.do_xor_a(n);
+                self.tick(8);
+            }
+            XOR_ATHL => {
+                let athl = self.get_athl()?;
+                self.do_xor_a(athl);
+                self.tick(8);
+            }
+            CP_N(n) => {
+                self.do_cp_a(n);
+                self.tick(8);
+            }
+            CP_ATHL => {
+                let athl = self.get_athl()?;
+                self.do_cp_a(athl);
+                self.tick(8);
+            }
+            JR_N(n) => {
+                let pc = self.get_program_counter();
+                self.set_program_counter(add_u16_i8(pc, n as i8));
+                self.tick(8)
+            }
+            JR_C_N(c, n) => {
+                if self.test_cond(c) {
+                    let pc = self.get_program_counter();
+                    self.set_program_counter(add_u16_i8(pc, n as i8));
+                }
+                self.tick(8);
+            }
+            CALL_NN(nn) => {
+                let pc = self.get_program_counter();
+                self.push_stack16(pc)?;
+                self.set_program_counter(nn);
+                self.tick(12);
+            }
+            CALL_C_NN(c, nn) => {
+                if self.test_cond(c) {
+                    let pc = self.get_program_counter();
+                    self.push_stack16(pc)?;
+                    self.set_program_counter(nn);
+                }
+                self.tick(12);
+            }
+            RRA => {
+                self.do_rr(ARegister);
+                self.tick(4);
+            }
+            RR_R(r) => {
+                self.do_rr(r);
+                self.tick(8);
+            }
+            SRL_R(r) => {
+                let v = self.get_register(r);
+                let lsb = get_bit(v, 0);
+                let v = v >> 1;
+                self.set_flags(&[(Flag::Z, v == 0),
+                                 (Flag::N, false),
+                                 (Flag::H, false),
+                                 (Flag::C, lsb)]);
+                self.set_register(r, v);
+                self.tick(8);
+            }
+            SRL_ATHL => {
+                let v = self.get_athl()?;
+                let lsb = get_bit(v, 0);
+                let v = v >> 1;
+                self.set_flags(&[(Flag::Z, v == 0),
+                                 (Flag::N, false),
+                                 (Flag::H, false),
+                                 (Flag::C, lsb)]);
+                self.set_athl(v)?;
+                self.tick(16);
+            }
+            BIT_B_R(b, r) => {
+                let v = self.get_register(r);
+                let btest = get_bit(v, bit_number(b));
+                self.set_flags(&[(Flag::Z, !btest), (Flag::N, false), (Flag::H, true)]);
+                self.tick(8);
+            }
+            SET_B_R(b, r) => {
+                let v = self.get_register(r);
+                let v = set_bit(v, bit_number(b), true);
+                self.set_register(r, v);
+                self.tick(8);
+            }
+            RES_B_R(b, r) => {
+                let v = self.get_register(r);
+                let v = set_bit(v, bit_number(b), false);
+                self.set_register(r, v);
+                self.tick(8);
+            }
+            RET => {
+                let pc = self.pop_stack16()?;
+                self.set_program_counter(pc);
+                self.tick(8);
+            }
+            RET_C(c) => {
+                if self.test_cond(c) {
+                    let pc = self.pop_stack16()?;
+                    self.set_program_counter(pc);
+                }
+                self.tick(8);
+            }
+            DI => {
+                self.set_interrupts_enabled(false);
+            }
+            EI => {
+                self.set_interrupts_enabled(true);
+            }
+            ins => {
+                return Err(format!("instruction {:?} unimplemented", ins).into());
+            }
         }
 
         Ok(())
