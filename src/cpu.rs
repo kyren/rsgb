@@ -169,13 +169,21 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
         LD_SP_HL => {
             cpu.tick(8);
-            let sp = cpu.get_stack_pointer();
-            set_hl(cpu, sp);
+            let hl = get_hl(cpu);
+            cpu.set_stack_pointer(hl);
         }
         LDHL_SP_N(n) => {
             cpu.tick(12);
             let sp = cpu.get_stack_pointer();
-            set_hl(cpu, ((sp as i32) + (n as i32)) as u16);
+            let (sp, h, c, _, _) = add16(sp, n as u16);
+            set_hl(cpu, sp);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = false;
+            flags.subtract = false;
+            flags.half_carry = h;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         LD_ATNN_SP(nn) => {
             cpu.tick(20);
@@ -348,11 +356,11 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         INC_R(r) => {
             cpu.tick(4);
             let v = cpu.get_register(r);
-            let (res, h, _) = add8(v, 1);
-            cpu.set_register(r, res);
+            let (v, h, _) = add8(v, 1);
+            cpu.set_register(r, v);
 
             let mut flags = cpu.get_flags();
-            flags.zero = res == 0;
+            flags.zero = v == 0;
             flags.subtract = false;
             flags.half_carry = h;
             cpu.set_flags(flags);
@@ -419,7 +427,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         ADD_SP_N(n) => {
             cpu.tick(16);
             let sp = cpu.get_stack_pointer();
-            let (sp, h, c) = add16(sp, n as u16);
+            let (sp, h, c, _, _) = add16(sp, n as u16);
             cpu.set_stack_pointer(sp);
 
             let mut flags = cpu.get_flags();
@@ -477,12 +485,26 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             let v = cpu.get_register(r);
             let v = make_word8(low_nibble(v), high_nibble(v));
             cpu.set_register(r, v);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = false;
+            cpu.set_flags(flags);
         }
         SWAP_ATHL => {
             cpu.tick(16);
             let v = get_athl(cpu)?;
             let v = make_word8(low_nibble(v), high_nibble(v));
             set_athl(cpu, v)?;
+
+            let mut flags = cpu.get_flags();
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = false;
+            cpu.set_flags(flags);
         }
 
         DAA => {
@@ -531,8 +553,8 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.tick(4);
 
             let mut flags = cpu.get_flags();
-            flags.subtract = true;
-            flags.half_carry = true;
+            flags.subtract = false;
+            flags.half_carry = false;
             flags.carry = !flags.carry;
             cpu.set_flags(flags);
         }
@@ -568,24 +590,69 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
         RLCA => {
             cpu.tick(4);
-            do_rlc(cpu, ARegister);
+            let v = cpu.get_register(ARegister);
+            let (v, c) = rotlc(v);
+            cpu.set_register(ARegister, v);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = false;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RLA => {
             cpu.tick(4);
-            do_rl(cpu, ARegister);
+            let v = cpu.get_register(ARegister);
+            let mut flags = cpu.get_flags();
+            let (v, c) = rotl(v, flags.carry);
+            cpu.set_register(ARegister, v);
+
+            flags.zero = false;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RRCA => {
             cpu.tick(4);
-            do_rrc(cpu, ARegister);
+            let v = cpu.get_register(ARegister);
+            let (v, c) = rotrc(v);
+            cpu.set_register(ARegister, v);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = false;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RRA => {
             cpu.tick(4);
-            do_rr(cpu, ARegister);
+            let v = cpu.get_register(ARegister);
+            let mut flags = cpu.get_flags();
+            let (v, c) = rotr(v, flags.carry);
+            cpu.set_register(ARegister, v);
+
+            flags.zero = false;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
 
         RLC_R(r) => {
             cpu.tick(8);
-            do_rlc(cpu, r);
+            let v = cpu.get_register(r);
+            let (v, c) = rotlc(v);
+            cpu.set_register(r, v);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RLC_ATHL => {
             cpu.tick(16);
@@ -603,7 +670,16 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
         RL_R(r) => {
             cpu.tick(8);
-            do_rl(cpu, r);
+            let v = cpu.get_register(r);
+            let mut flags = cpu.get_flags();
+            let (v, c) = rotl(v, flags.carry);
+            cpu.set_register(r, v);
+
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RL_ATHL => {
             cpu.tick(16);
@@ -623,7 +699,16 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
         RRC_R(r) => {
             cpu.tick(8);
-            do_rrc(cpu, r);
+            let v = cpu.get_register(r);
+            let (v, c) = rotrc(v);
+            cpu.set_register(r, v);
+
+            let mut flags = cpu.get_flags();
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RRC_ATHL => {
             cpu.tick(16);
@@ -641,7 +726,16 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
         RR_R(r) => {
             cpu.tick(8);
-            do_rr(cpu, r);
+            let v = cpu.get_register(r);
+            let mut flags = cpu.get_flags();
+            let (v, c) = rotr(v, flags.carry);
+            cpu.set_register(r, v);
+
+            flags.zero = v == 0;
+            flags.subtract = false;
+            flags.half_carry = false;
+            flags.carry = c;
+            cpu.set_flags(flags);
         }
         RR_ATHL => {
             cpu.tick(16);
@@ -1035,26 +1129,23 @@ fn add_a<C: Cpu>(cpu: &mut C, n: u8) {
     cpu.set_flags(flags);
 }
 
-fn add_ca<C: Cpu>(cpu: &mut C, mut n: u8) {
+fn add_ca<C: Cpu>(cpu: &mut C, n: u8) {
     let v = cpu.get_register(ARegister);
     let mut flags = cpu.get_flags();
 
-    let mut carry = false;
-    if flags.carry {
-        if n == 0xff {
-            carry = true;
-        }
-        n = n.wrapping_add(1);
-    }
-    let (v, h, c) = add8(v, n);
-    carry |= c;
+    let (v, h1, c1) = add8(v, n);
+    let (v, h2, c2) = if flags.carry {
+        add8(v, 1)
+    } else {
+        (v, false, false)
+    };
 
     cpu.set_register(ARegister, v);
 
     flags.zero = v == 0;
     flags.subtract = false;
-    flags.half_carry = h;
-    flags.carry = carry;
+    flags.half_carry = h1 || h2;
+    flags.carry = c1 || c2;
     cpu.set_flags(flags);
 }
 
@@ -1071,26 +1162,23 @@ fn sub_a<C: Cpu>(cpu: &mut C, n: u8) {
     cpu.set_flags(flags);
 }
 
-fn sub_ca<C: Cpu>(cpu: &mut C, mut n: u8) {
+fn sub_ca<C: Cpu>(cpu: &mut C, n: u8) {
     let v = cpu.get_register(ARegister);
     let mut flags = cpu.get_flags();
 
-    let mut carry = false;
-    if flags.carry {
-        if n == 0x00 {
-            carry = true;
-        }
-        n = n.wrapping_sub(1);
-    }
-    let (v, h, c) = sub8(v, n);
-    carry |= c;
+    let (v, h1, c1) = sub8(v, n);
+    let (v, h2, c2) = if flags.carry {
+        sub8(v, 1)
+    } else {
+        (v, false, false)
+    };
 
     cpu.set_register(ARegister, v);
 
     flags.zero = v == 0;
     flags.subtract = true;
-    flags.half_carry = h;
-    flags.carry = carry;
+    flags.half_carry = h1 || h2;
+    flags.carry = c1 || c2;
     cpu.set_flags(flags);
 }
 
@@ -1147,7 +1235,7 @@ fn do_cp_a<C: Cpu>(cpu: &mut C, n: u8) {
 
 fn do_add_hl<C: Cpu>(cpu: &mut C, nn: u16) {
     let vv = get_hl(cpu);
-    let (vv, h, c) = add16(vv, nn);
+    let (vv, _, _, h, c) = add16(vv, nn);
     set_hl(cpu, vv);
 
     let mut flags = cpu.get_flags();
@@ -1171,56 +1259,4 @@ fn rotrc(b: u8) -> (u8, bool) {
 
 fn rotr(b: u8, c: bool) -> (u8, bool) {
     (set_bit(b >> 1, 7, c), get_bit(b, 0))
-}
-
-fn do_rlc<C: Cpu>(cpu: &mut C, r: Register) {
-    let v = cpu.get_register(r);
-    let (v, c) = rotlc(v);
-    cpu.set_register(r, v);
-
-    let mut flags = cpu.get_flags();
-    flags.zero = v == 0;
-    flags.subtract = false;
-    flags.half_carry = false;
-    flags.carry = c;
-    cpu.set_flags(flags);
-}
-
-fn do_rl<C: Cpu>(cpu: &mut C, r: Register) {
-    let v = cpu.get_register(r);
-    let mut flags = cpu.get_flags();
-    let (v, c) = rotl(v, flags.carry);
-    cpu.set_register(r, v);
-
-    flags.zero = v == 0;
-    flags.subtract = false;
-    flags.half_carry = false;
-    flags.carry = c;
-    cpu.set_flags(flags);
-}
-
-fn do_rrc<C: Cpu>(cpu: &mut C, r: Register) {
-    let v = cpu.get_register(r);
-    let (v, c) = rotrc(v);
-    cpu.set_register(r, v);
-
-    let mut flags = cpu.get_flags();
-    flags.zero = v == 0;
-    flags.subtract = false;
-    flags.half_carry = false;
-    flags.carry = c;
-    cpu.set_flags(flags);
-}
-
-fn do_rr<C: Cpu>(cpu: &mut C, r: Register) {
-    let v = cpu.get_register(r);
-    let mut flags = cpu.get_flags();
-    let (v, c) = rotr(v, flags.carry);
-    cpu.set_register(r, v);
-
-    flags.zero = v == 0;
-    flags.subtract = false;
-    flags.half_carry = false;
-    flags.carry = c;
-    cpu.set_flags(flags);
 }

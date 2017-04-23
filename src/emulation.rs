@@ -34,7 +34,7 @@ impl EmulatorState {
     pub fn new() -> EmulatorState {
         EmulatorState {
             interrupts_enabled: 0x0f,
-            stack_pointer: 0x0,
+            stack_pointer: 0xfffe,
             program_counter: 0x100,
             a_register: 0x0,
             b_register: 0x0,
