@@ -6,7 +6,6 @@ use std::io::Read;
 use std::fs::File;
 use image::{ImageBuffer, Luma};
 
-use rsgb::cpu::*;
 use rsgb::emulation::*;
 use rsgb::screen::*;
 

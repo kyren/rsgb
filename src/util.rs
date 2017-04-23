@@ -5,6 +5,10 @@ use std::ops::{BitAnd, BitOr, Not, Shl};
 pub type Error = Box<error::Error>;
 pub type Result<T> = result::Result<T, Error>;
 
+pub fn make_word8(h: u8, l: u8) -> u8 {
+    (h << 4) | l
+}
+
 pub fn make_word16(h: u8, l: u8) -> u16 {
     ((h as u16) << 8) | (l as u16)
 }
@@ -55,8 +59,4 @@ pub fn sub8(a: u8, b: u8) -> (u8, bool, bool) {
 pub fn add16(a: u16, b: u16) -> (u16, bool, bool) {
     let low12 = |n| make_word16(low_nibble(high_byte(n)), low_byte(n));
     (a.wrapping_add(b), low12(a) + low12(b) > 0xfff, a as u32 + b as u32 > 0xffff)
-}
-
-pub fn add_u16_i8(a: u16, b: i8) -> u16 {
-    (a as i32 + b as i32) as u16
 }

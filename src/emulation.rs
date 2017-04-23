@@ -76,6 +76,10 @@ impl EmulatorState {
         }
     }
 
+    pub fn step(&mut self) -> Result<()> {
+        step_cpu(self)
+    }
+
     pub fn get_screen(&self) -> Screen {
         let mut screen = Screen::new();
         for y in 0..VERTICAL_SCREEN_PIXELS / 8 {
