@@ -114,14 +114,14 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             let hl = get_hl(cpu);
             let v = cpu.get_memory(hl)?;
             cpu.set_register(ARegister, v);
-            set_hl(cpu, hl - 1);
+            set_hl(cpu, hl.wrapping_sub(1));
         }
         LDD_ATHL_A => {
             cpu.tick(8);
             let hl = get_hl(cpu);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(hl, v)?;
-            set_hl(cpu, hl - 1);
+            set_hl(cpu, hl.wrapping_sub(1));
         }
 
         LDI_A_ATHL => {
@@ -129,14 +129,14 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             let hl = get_hl(cpu);
             let v = cpu.get_memory(hl)?;
             cpu.set_register(ARegister, v);
-            set_hl(cpu, hl + 1);
+            set_hl(cpu, hl.wrapping_add(1));
         }
         LDI_ATHL_A => {
             cpu.tick(8);
             let hl = get_hl(cpu);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(hl, v)?;
-            set_hl(cpu, hl + 1);
+            set_hl(cpu, hl.wrapping_add(1));
         }
 
         LDH_A_ATN(n) => {
@@ -486,7 +486,36 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         DAA => {
-            return Err("DAA is unimplemented".into());
+            cpu.tick(4);
+
+            let mut a = cpu.get_register(ARegister);
+            let mut flags = cpu.get_flags();
+
+            let mut corr = 0;
+            if flags.half_carry {
+                corr |= 0x06;
+            }
+            if flags.carry {
+                corr |= 0x60;
+            }
+            if flags.subtract {
+                a = a.wrapping_sub(corr);
+            } else {
+                if a & 0x0f > 0x09 {
+                    corr |= 0x06;
+                }
+                if a > 0x99 {
+                    corr |= 0x60;
+                }
+                a = a.wrapping_add(corr);
+            }
+
+            cpu.set_register(ARegister, a);
+
+            flags.zero = a == 0;
+            flags.half_carry = false;
+            flags.carry = corr & 0x60 != 0;
+            cpu.set_flags(flags);
         }
         CPL => {
             cpu.tick(4);
@@ -870,27 +899,29 @@ fn reset_address(r: ResetAddress) -> u16 {
 
 fn get_memory16<C: Cpu>(cpu: &C, addr: u16) -> Result<u16> {
     let l = cpu.get_memory(addr)?;
-    let h = cpu.get_memory(addr + 1)?;
+    let h = cpu.get_memory(addr.checked_add(1).ok_or("address overflow")?)?;
     Ok(make_word16(h, l))
 }
 
 fn set_memory16<C: Cpu>(cpu: &mut C, addr: u16, nn: u16) -> Result<()> {
     cpu.set_memory(addr, low_byte(nn))?;
-    cpu.set_memory(addr + 1, high_byte(nn))?;
+    cpu.set_memory(addr.checked_add(1).ok_or("address overflow")?,
+                    high_byte(nn))?;
     Ok(())
 }
 
 fn push_stack16<C: Cpu>(cpu: &mut C, nn: u16) -> Result<()> {
     let sp = cpu.get_stack_pointer();
-    set_memory16(cpu, sp - 2, nn)?;
-    cpu.set_stack_pointer(sp - 2);
+    let sp_dec = sp.checked_sub(2).ok_or("stack overflow")?;
+    set_memory16(cpu, sp_dec, nn)?;
+    cpu.set_stack_pointer(sp_dec);
     Ok(())
 }
 
 fn pop_stack16<C: Cpu>(cpu: &mut C) -> Result<u16> {
     let sp = cpu.get_stack_pointer();
     let nn = get_memory16(cpu, sp)?;
-    cpu.set_stack_pointer(sp + 2);
+    cpu.set_stack_pointer(sp.checked_add(2).ok_or("stack underflow")?);
     Ok(nn)
 }
 
