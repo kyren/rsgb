@@ -13,9 +13,10 @@ pub struct EmulatorState {
     pub c_register: u8,
     pub d_register: u8,
     pub e_register: u8,
-    pub f_register: u8,
     pub h_register: u8,
     pub l_register: u8,
+
+    pub flags: Flags,
 
     pub cartridge_rom_bank0: [u8; 0x4000],
     pub cartridge_rom_bank1: [u8; 0x4000],
@@ -40,9 +41,14 @@ impl EmulatorState {
             c_register: 0x0,
             d_register: 0x0,
             e_register: 0x0,
-            f_register: 0x0,
             h_register: 0x0,
             l_register: 0x0,
+            flags: Flags {
+                zero: false,
+                subtract: false,
+                half_carry: false,
+                carry: false,
+            },
             cartridge_rom_bank0: [0x0; 0x4000],
             cartridge_rom_bank1: [0x0; 0x4000],
             internal_ram_bank0: [0x0; 0x1000],
@@ -131,12 +137,12 @@ impl Cpu for EmulatorState {
         }
     }
 
-    fn get_flags_register(&self) -> u8 {
-        self.f_register
+    fn get_flags(&self) -> Flags {
+        self.flags
     }
 
-    fn set_flags_register(&mut self, flags: u8) {
-        self.f_register = flags;
+    fn set_flags(&mut self, flags: Flags) {
+        self.flags = flags;
     }
 
     fn get_program_counter(&self) -> u16 {
@@ -165,7 +171,7 @@ impl Cpu for EmulatorState {
 
     fn get_memory(&self, addr: u16) -> Result<u8> {
         match addr {
-            0...0x3999 => Ok(self.cartridge_rom_bank0[addr as usize]),
+            0...0x3fff => Ok(self.cartridge_rom_bank0[addr as usize]),
             0x4000...0x7fff => Ok(self.cartridge_rom_bank1[addr as usize - 0x4000]),
             0x8000...0x97ff => Ok(self.character_ram[addr as usize - 0x8000]),
             0x9800...0x9fff => Ok(self.bg_map_data[addr as usize - 0x9800]),
