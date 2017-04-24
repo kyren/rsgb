@@ -23,12 +23,12 @@ pub trait Cpu {
     fn get_stack_pointer(&self) -> u16;
     fn set_stack_pointer(&mut self, sp: u16);
 
+    fn set_interrupts_enabled(&mut self, enabled: bool);
+
     fn tick(&mut self, count: u8);
 
     fn halt(&mut self);
     fn stop(&mut self);
-
-    fn set_interrupts_enabled(&mut self, enabled: bool);
 
     fn get_memory(&self, addr: u16) -> Result<u8>;
     fn set_memory(&mut self, addr: u16, n: u8) -> Result<()>;
@@ -43,81 +43,81 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
 
     match instruction {
         LD_R_R(tr, sr) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let sv = cpu.get_register(sr);
             cpu.set_register(tr, sv);
         }
         LD_R_N(tr, n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             cpu.set_register(tr, n);
         }
         LD_R_ATHL(tr) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_athl(cpu)?;
             cpu.set_register(tr, v);
         }
 
         LD_ATHL_R(sr) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(sr);
             set_athl(cpu, v)?;
         }
         LD_ATHL_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             set_athl(cpu, n)?;
         }
 
         LD_A_ATC => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_atc(cpu)?;
             cpu.set_register(ARegister, v);
         }
         LD_A_ATBC => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_atbc(cpu)?;
             cpu.set_register(ARegister, v);
         }
         LD_A_ATDE => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_atde(cpu)?;
             cpu.set_register(ARegister, v);
         }
         LD_A_ATNN(nn) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = cpu.get_memory(nn)?;
             cpu.set_register(ARegister, v);
         }
 
         LD_ATC_A => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(ARegister);
             set_atc(cpu, v)?;
         }
         LD_ATBC_A => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(ARegister);
             set_atbc(cpu, v)?;
         }
         LD_ATDE_A => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(ARegister);
             set_atde(cpu, v)?;
         }
         LD_ATNN_A(nn) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(nn, v)?;
         }
 
         LDD_A_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             let v = cpu.get_memory(hl)?;
             cpu.set_register(ARegister, v);
             set_hl(cpu, hl.wrapping_sub(1));
         }
         LDD_ATHL_A => {
-            cpu.tick(8);
+            cpu.tick(4);
             let hl = get_hl(cpu);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(hl, v)?;
@@ -125,14 +125,14 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         LDI_A_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             let v = cpu.get_memory(hl)?;
             cpu.set_register(ARegister, v);
             set_hl(cpu, hl.wrapping_add(1));
         }
         LDI_ATHL_A => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(hl, v)?;
@@ -140,40 +140,40 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         LDH_A_ATN(n) => {
-            cpu.tick(12);
+            cpu.tick(3);
             let v = cpu.get_memory(make_word16(0xff, n))?;
             cpu.set_register(ARegister, v);
         }
         LDH_ATN_A(n) => {
-            cpu.tick(12);
+            cpu.tick(3);
             let v = cpu.get_register(ARegister);
             cpu.set_memory(make_word16(0xff, n), v)?;
         }
 
         LD_BC_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             set_bc(cpu, nn);
         }
         LD_DE_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             set_de(cpu, nn);
         }
         LD_HL_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             set_hl(cpu, nn);
         }
         LD_SP_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             cpu.set_stack_pointer(nn);
         }
 
         LD_SP_HL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             cpu.set_stack_pointer(hl);
         }
         LDHL_SP_N(n) => {
-            cpu.tick(12);
+            cpu.tick(3);
             let sp = cpu.get_stack_pointer();
             let (sp, h, c, _, _) = add16(sp, n as u16);
             set_hl(cpu, sp);
@@ -186,175 +186,175 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         LD_ATNN_SP(nn) => {
-            cpu.tick(20);
+            cpu.tick(5);
             let sp = cpu.get_stack_pointer();
             set_memory16(cpu, nn, sp)?;
         }
 
         PUSH_AF => {
-            cpu.tick(16);
+            cpu.tick(4);
             let af = get_af(cpu);
             push_stack16(cpu, af)?;
         }
         PUSH_BC => {
-            cpu.tick(16);
+            cpu.tick(4);
             let bc = get_bc(cpu);
             push_stack16(cpu, bc)?;
         }
         PUSH_DE => {
-            cpu.tick(16);
+            cpu.tick(4);
             let de = get_de(cpu);
             push_stack16(cpu, de)?;
         }
         PUSH_HL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let hl = get_hl(cpu);
             push_stack16(cpu, hl)?;
         }
 
         POP_AF => {
-            cpu.tick(12);
+            cpu.tick(3);
             let nn = pop_stack16(cpu)?;
             set_af(cpu, nn);
         }
         POP_BC => {
-            cpu.tick(12);
+            cpu.tick(3);
             let nn = pop_stack16(cpu)?;
             set_bc(cpu, nn);
         }
         POP_DE => {
-            cpu.tick(12);
+            cpu.tick(3);
             let nn = pop_stack16(cpu)?;
             set_de(cpu, nn);
         }
         POP_HL => {
-            cpu.tick(12);
+            cpu.tick(3);
             let nn = pop_stack16(cpu)?;
             set_hl(cpu, nn);
         }
 
         ADD_A_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let n = cpu.get_register(r);
             add_a(cpu, n);
         }
         ADD_A_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             add_a(cpu, n);
         }
         ADD_A_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             add_a(cpu, athl);
         }
 
         ADC_A_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let n = cpu.get_register(r);
             add_ca(cpu, n);
         }
         ADC_A_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             add_ca(cpu, n);
         }
         ADC_A_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             add_ca(cpu, athl);
         }
 
         SUB_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let n = cpu.get_register(r);
             sub_a(cpu, n);
         }
         SUB_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             sub_a(cpu, n);
         }
         SUB_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             sub_a(cpu, athl);
         }
 
         SBC_A_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let n = cpu.get_register(r);
             sub_ca(cpu, n);
         }
         SBC_A_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             sub_ca(cpu, n);
         }
         SBC_A_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             sub_ca(cpu, athl);
         }
 
         AND_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let r = cpu.get_register(r);
             do_and_a(cpu, r);
         }
         AND_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             do_and_a(cpu, n);
         }
         AND_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_athl(cpu)?;
             do_and_a(cpu, v);
         }
 
         OR_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let r = cpu.get_register(r);
             do_or_a(cpu, r);
         }
         OR_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             do_or_a(cpu, n);
         }
         OR_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = get_athl(cpu)?;
             do_or_a(cpu, v);
         }
 
         XOR_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let r = cpu.get_register(r);
             do_xor_a(cpu, r);
         }
         XOR_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             do_xor_a(cpu, n);
         }
         XOR_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             do_xor_a(cpu, athl);
         }
 
         CP_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let n = cpu.get_register(r);
             do_cp_a(cpu, n);
         }
         CP_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             do_cp_a(cpu, n);
         }
         CP_ATHL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let athl = get_athl(cpu)?;
             do_cp_a(cpu, athl);
         }
 
         INC_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(r);
             let (v, h, _) = add8(v, 1);
             cpu.set_register(r, v);
@@ -366,7 +366,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         INC_ATHL => {
-            cpu.tick(12);
+            cpu.tick(3);
             let v = get_athl(cpu)?;
             let (res, h, _) = add8(v, 1);
             set_athl(cpu, res)?;
@@ -379,7 +379,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         DEC_R(r) => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(r);
             let (res, h, _) = sub8(v, 1);
             cpu.set_register(r, res);
@@ -391,7 +391,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         DEC_ATHL => {
-            cpu.tick(12);
+            cpu.tick(3);
             let v = get_athl(cpu)?;
             let (res, h, _) = sub8(v, 1);
             set_athl(cpu, res)?;
@@ -404,28 +404,28 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         ADD_HL_BC => {
-            cpu.tick(8);
+            cpu.tick(2);
             let bc = get_bc(cpu);
             do_add_hl(cpu, bc);
         }
         ADD_HL_DE => {
-            cpu.tick(8);
+            cpu.tick(2);
             let de = get_de(cpu);
             do_add_hl(cpu, de);
         }
         ADD_HL_HL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             do_add_hl(cpu, hl);
         }
         ADD_HL_SP => {
-            cpu.tick(8);
+            cpu.tick(2);
             let sp = cpu.get_stack_pointer();
             do_add_hl(cpu, sp);
         }
 
         ADD_SP_N(n) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let sp = cpu.get_stack_pointer();
             let (sp, h, c, _, _) = add16(sp, n as u16);
             cpu.set_stack_pointer(sp);
@@ -439,49 +439,49 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         INC_BC => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_bc(cpu);
             set_bc(cpu, hl.wrapping_add(1));
         }
         INC_DE => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_de(cpu);
             set_de(cpu, hl.wrapping_add(1));
         }
         INC_HL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             set_hl(cpu, hl.wrapping_add(1));
         }
         INC_SP => {
-            cpu.tick(8);
+            cpu.tick(2);
             let sp = cpu.get_stack_pointer();
             cpu.set_stack_pointer(sp.wrapping_add(1));
         }
 
         DEC_BC => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_bc(cpu);
             set_bc(cpu, hl.wrapping_sub(1));
         }
         DEC_DE => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_de(cpu);
             set_de(cpu, hl.wrapping_sub(1));
         }
         DEC_HL => {
-            cpu.tick(8);
+            cpu.tick(2);
             let hl = get_hl(cpu);
             set_hl(cpu, hl.wrapping_sub(1));
         }
         DEC_SP => {
-            cpu.tick(8);
+            cpu.tick(2);
             let sp = cpu.get_stack_pointer();
             cpu.set_stack_pointer(sp.wrapping_sub(1));
         }
 
         SWAP_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let v = make_word8(low_nibble(v), high_nibble(v));
             cpu.set_register(r, v);
@@ -494,7 +494,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         SWAP_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let v = make_word8(low_nibble(v), high_nibble(v));
             set_athl(cpu, v)?;
@@ -508,7 +508,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         DAA => {
-            cpu.tick(4);
+            cpu.tick(1);
 
             let mut a = cpu.get_register(ARegister);
             let mut flags = cpu.get_flags();
@@ -540,7 +540,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         CPL => {
-            cpu.tick(4);
+            cpu.tick(1);
             let a = cpu.get_register(ARegister);
             cpu.set_register(ARegister, !a);
 
@@ -550,7 +550,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         CCF => {
-            cpu.tick(4);
+            cpu.tick(1);
 
             let mut flags = cpu.get_flags();
             flags.subtract = false;
@@ -559,7 +559,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         SCF => {
-            cpu.tick(4);
+            cpu.tick(1);
 
             let mut flags = cpu.get_flags();
             flags.subtract = false;
@@ -569,27 +569,27 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         NOP => {
-            cpu.tick(4);
+            cpu.tick(1);
         }
         HALT => {
-            cpu.tick(4);
+            cpu.tick(1);
             cpu.halt();
         }
         STOP => {
-            cpu.tick(4);
+            cpu.tick(1);
             cpu.stop();
         }
         DI => {
-            cpu.tick(4);
+            cpu.tick(1);
             cpu.set_interrupts_enabled(false);
         }
         EI => {
-            cpu.tick(4);
+            cpu.tick(1);
             cpu.set_interrupts_enabled(true);
         }
 
         RLCA => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(ARegister);
             let (v, c) = rotlc(v);
             cpu.set_register(ARegister, v);
@@ -602,7 +602,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RLA => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(ARegister);
             let mut flags = cpu.get_flags();
             let (v, c) = rotl(v, flags.carry);
@@ -615,7 +615,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RRCA => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(ARegister);
             let (v, c) = rotrc(v);
             cpu.set_register(ARegister, v);
@@ -628,7 +628,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RRA => {
-            cpu.tick(4);
+            cpu.tick(1);
             let v = cpu.get_register(ARegister);
             let mut flags = cpu.get_flags();
             let (v, c) = rotr(v, flags.carry);
@@ -642,7 +642,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RLC_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let (v, c) = rotlc(v);
             cpu.set_register(r, v);
@@ -655,7 +655,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RLC_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let (v, c) = rotlc(v);
             set_athl(cpu, v)?;
@@ -669,7 +669,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RL_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let mut flags = cpu.get_flags();
             let (v, c) = rotl(v, flags.carry);
@@ -682,7 +682,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RL_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
 
             let mut flags = cpu.get_flags();
             let v = get_athl(cpu)?;
@@ -698,7 +698,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RRC_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let (v, c) = rotrc(v);
             cpu.set_register(r, v);
@@ -711,7 +711,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RRC_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let (v, c) = rotrc(v);
             set_athl(cpu, v)?;
@@ -725,7 +725,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RR_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let mut flags = cpu.get_flags();
             let (v, c) = rotr(v, flags.carry);
@@ -738,7 +738,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         RR_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let mut flags = cpu.get_flags();
             let v = get_athl(cpu)?;
             let c = flags.carry;
@@ -753,7 +753,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         SLA_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let c = get_bit(v, 7);
             let v = v << 1;
@@ -767,7 +767,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         SLA_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let c = get_bit(v, 7);
             let v = v << 1;
@@ -782,7 +782,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         SRA_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let lsb = get_bit(v, 0);
             let msb = get_bit(v, 7);
@@ -797,7 +797,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         SRA_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let lsb = get_bit(v, 0);
             let msb = get_bit(v, 7);
@@ -813,7 +813,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         SRL_R(r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let lsb = get_bit(v, 0);
             let v = v >> 1;
@@ -827,7 +827,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         SRL_ATHL => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let lsb = get_bit(v, 0);
             let v = v >> 1;
@@ -842,7 +842,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         BIT_B_R(b, r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let btest = get_bit(v, bit_number(b));
 
@@ -853,7 +853,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
             cpu.set_flags(flags);
         }
         BIT_B_ATHL(b) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let btest = get_bit(v, bit_number(b));
 
@@ -865,54 +865,54 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         SET_B_R(b, r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let v = set_bit(v, bit_number(b), true);
             cpu.set_register(r, v);
         }
         SET_B_ATHL(b) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let v = set_bit(v, bit_number(b), true);
             set_athl(cpu, v)?;
         }
 
         RES_B_R(b, r) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let v = cpu.get_register(r);
             let v = set_bit(v, bit_number(b), false);
             cpu.set_register(r, v);
         }
         RES_B_ATHL(b) => {
-            cpu.tick(16);
+            cpu.tick(4);
             let v = get_athl(cpu)?;
             let v = set_bit(v, bit_number(b), false);
             set_athl(cpu, v)?;
         }
 
         JP_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             cpu.set_program_counter(nn);
         }
         JP_C_NN(c, nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             if test_cond(cpu, c) {
                 cpu.set_program_counter(nn);
             }
         }
         JP_ATHL => {
-            cpu.tick(4);
+            cpu.tick(1);
             let hl = get_hl(cpu);
             cpu.set_program_counter(hl);
         }
 
         JR_N(n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             let pc = cpu.get_program_counter();
             cpu.set_program_counter(pc.wrapping_add(n as u16));
         }
         JR_C_N(c, n) => {
-            cpu.tick(8);
+            cpu.tick(2);
             if test_cond(cpu, c) {
                 let pc = cpu.get_program_counter();
                 cpu.set_program_counter(pc.wrapping_add(n as u16));
@@ -920,13 +920,13 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         CALL_NN(nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             let pc = cpu.get_program_counter();
             push_stack16(cpu, pc)?;
             cpu.set_program_counter(nn);
         }
         CALL_C_NN(c, nn) => {
-            cpu.tick(12);
+            cpu.tick(3);
             if test_cond(cpu, c) {
                 let pc = cpu.get_program_counter();
                 push_stack16(cpu, pc)?;
@@ -935,19 +935,19 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RST_RA(ra) => {
-            cpu.tick(32);
+            cpu.tick(8);
             let pc = cpu.get_program_counter();
             push_stack16(cpu, pc)?;
             cpu.set_program_counter(reset_address(ra));
         }
 
         RET => {
-            cpu.tick(8);
+            cpu.tick(2);
             let pc = pop_stack16(cpu)?;
             cpu.set_program_counter(pc);
         }
         RET_C(c) => {
-            cpu.tick(8);
+            cpu.tick(2);
             if test_cond(cpu, c) {
                 let pc = pop_stack16(cpu)?;
                 cpu.set_program_counter(pc);
@@ -955,7 +955,7 @@ pub fn step_cpu<C: Cpu>(cpu: &mut C) -> Result<()> {
         }
 
         RETI => {
-            cpu.tick(8);
+            cpu.tick(2);
             let nn = pop_stack16(cpu)?;
             cpu.set_program_counter(nn);
             cpu.set_interrupts_enabled(true);

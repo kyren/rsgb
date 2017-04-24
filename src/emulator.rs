@@ -3,7 +3,7 @@ use cpu::*;
 use instruction::*;
 use screen::*;
 
-pub struct EmulatorState {
+pub struct Emulator {
     pub interrupts_enabled: u8,
     pub stack_pointer: u16,
     pub program_counter: u16,
@@ -30,9 +30,9 @@ pub struct EmulatorState {
     pub sprite_attribute_data: [u8; 0x80],
 }
 
-impl EmulatorState {
-    pub fn new() -> EmulatorState {
-        EmulatorState {
+impl Emulator {
+    pub fn new() -> Emulator {
+        Emulator {
             interrupts_enabled: 0x0f,
             stack_pointer: 0xfffe,
             program_counter: 0x100,
@@ -60,26 +60,38 @@ impl EmulatorState {
         }
     }
 
-    pub fn load_rom(rom: &[u8]) -> Result<EmulatorState> {
-        let mut state = EmulatorState::new();
-        match rom.len() {
-            0x4000 => {
-                state
-                    .cartridge_rom_bank0
-                    .copy_from_slice(&rom[0..0x4000]);
-                Ok(state)
-            }
-            0x8000 => {
+    pub fn load_rom(rom: &[u8]) -> Result<Emulator> {
+        if rom.len() < 0x4000 {
+            return Err("rom size invalid".into());
+        }
+
+        let mut state = Emulator::new();
+
+        let cart_type = rom[0x147];
+        let rom_size = rom[0x148];
+
+        // TODO: Actually implement MBC1
+        if cart_type != 0 && cart_type != 1 {
+            return Err(format!("mbc / ram unsupported, cart type {:x}", cart_type).into());
+        }
+
+        match rom_size {
+            0 => {
+                if rom.len() != 0x8000 {
+                    return Err("rom size mismatch".into());
+                }
+
                 state
                     .cartridge_rom_bank0
                     .copy_from_slice(&rom[0..0x4000]);
                 state
                     .cartridge_rom_bank1
                     .copy_from_slice(&rom[0x4000..0x8000]);
-                Ok(state)
             }
-            len => Err(format!("Invalid rom size {}", len).into()),
-        }
+            s => return Err(format!("unsupported rom_size code {:x}", s).into()),
+        };
+
+        Ok(state)
     }
 
     pub fn step(&mut self) -> Result<()> {
@@ -112,7 +124,7 @@ impl EmulatorState {
     }
 }
 
-impl Cpu for EmulatorState {
+impl Cpu for Emulator {
     fn get_register(&self, reg: Register) -> u8 {
         match reg {
             Register::ARegister => self.a_register,
@@ -161,13 +173,13 @@ impl Cpu for EmulatorState {
         self.stack_pointer = pc;
     }
 
+    fn set_interrupts_enabled(&mut self, _enabled: bool) {}
+
     fn tick(&mut self, _count: u8) {}
 
     fn halt(&mut self) {}
 
     fn stop(&mut self) {}
-
-    fn set_interrupts_enabled(&mut self, _enabled: bool) {}
 
     fn get_memory(&self, addr: u16) -> Result<u8> {
         match addr {

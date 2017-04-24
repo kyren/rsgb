@@ -6,7 +6,7 @@ use std::io::Read;
 use std::fs::File;
 use image::{ImageBuffer, Luma};
 
-use rsgb::emulation::*;
+use rsgb::emulator::*;
 use rsgb::screen::*;
 
 fn main() {
@@ -26,14 +26,14 @@ fn main() {
         .read_to_end(&mut rom)
         .expect("could not read rom");
 
-    let mut emulator_state = EmulatorState::load_rom(&rom).expect("could not load rom");
+    let mut emulator = Emulator::load_rom(&rom).expect("could not load rom");
     for i in 0..step_count {
-        emulator_state
+        emulator
             .step()
             .expect(&format!("emulation error at step {}", i));
     }
 
-    let screen = emulator_state.get_screen();
+    let screen = emulator.get_screen();
     let image = ImageBuffer::from_fn(HORIZONTAL_SCREEN_PIXELS as u32,
                                      VERTICAL_SCREEN_PIXELS as u32,
                                      |x, y| match screen.get_pixel(x as u8, y as u8) {
